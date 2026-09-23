@@ -1,0 +1,20 @@
+/* Landing page fonts and small global rules.
+   Font variables come from next/font in app/layout.tsx; the quoted names are fallbacks. */
+.font-display,
+.font-body {
+  font-family: var(--font-archivo, "Archivo"), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.landing .font-mono {
+  font-family: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.font-chesspieces {
+  font-family: var(--font-chess, "Noto Sans Symbols 2"), "Segoe UI Symbol", "DejaVu Sans", serif;
+}
+.landing section[id] {
+  scroll-margin-top: 72px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.landing) {
+    scroll-behavior: smooth;
+  }
+}
