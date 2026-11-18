@@ -1,0 +1,6 @@
+# OS / editor
+.DS_Store
+.vscode/
+
+# Local scratch / stale artifacts
+_to_delete/
