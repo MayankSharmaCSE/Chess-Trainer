@@ -14,7 +14,7 @@ class Game(Base):
     """One imported game (US-002). Raw PGN kept so Stockfish (US-005) can run later."""
 
     __tablename__ = "games"
-    __table_args__ = (UniqueConstraint("platform", "external_id"),)
+    __table_args__ = (UniqueConstraint("user_id", "platform", "external_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_auth import router as auth_router
+from app.api.routes_bots import router as bots_router
 from app.api.routes_progress import router as progress_router
 from app.api.routes_sync import router as sync_router
 from app.api.routes_training import router as training_router
@@ -30,6 +31,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(bots_router)
 app.include_router(sync_router)
 app.include_router(analysis_router)
 app.include_router(weaknesses_router)

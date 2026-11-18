@@ -211,3 +211,65 @@ export interface ProgressReport {
   training_completion_rate: number | null;
   insufficient_data: boolean;
 }
+
+export interface Bot {
+  id: string;
+  name: string;
+  rating: number;
+  skill_level: number;
+  difficulty: string;
+  description: string;
+  avatar: string | null;
+  depth: number;
+}
+
+export interface BotMoveHistoryItem {
+  move_number: number;
+  ply: number;
+  san: string;
+  uci: string;
+  color: "white" | "black";
+}
+
+export interface BotGame {
+  id: number;
+  user_id: number;
+  bot_id: string;
+  bot: Bot;
+  player_color: "white" | "black";
+  result: "win" | "loss" | "draw" | "in_progress";
+  status: string;
+  pgn: string;
+  fen: string;
+  total_moves: number;
+  time_control: string | null;
+  moves: BotMoveHistoryItem[];
+  captured_white: string[];
+  captured_black: string[];
+  material_advantage: number;
+  turn: "white" | "black";
+  is_check: boolean;
+  is_checkmate: boolean;
+  is_game_over: boolean;
+  last_move: [string, string] | null;
+  ai_move: string | null;
+  started_at: string;
+  completed_at: string | null;
+  linked_game_id: number | null;
+}
+
+export interface BotGameAnalysis {
+  game_id: number;
+  linked_game_id: number | null;
+  result: string;
+  player_color: string;
+  accuracy: number;
+  performance_rating: number | null;
+  blunders: number;
+  mistakes: number;
+  inaccuracies: number;
+  best_move: string | null;
+  worst_move: string | null;
+  moves: MoveAnalysis[];
+}
+

@@ -1,1 +1,1 @@
-from app.models import account, analysis, game, user  # noqa: F401
+from app.models import account, analysis, bot, game, training, user  # noqa: F401

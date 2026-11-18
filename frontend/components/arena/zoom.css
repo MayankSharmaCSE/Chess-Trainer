@@ -1,0 +1,468 @@
+/* ============================================================
+   Bot Arena — Immersive Zoom Mode
+   Scoped styles: every rule is namespaced under .bz-* so nothing
+   here leaks into the rest of the application. The zoom overlay
+   reuses the existing InteractiveBoard component; these rules only
+   change presentation (size, layout, motion), never game logic.
+   ============================================================ */
+
+/* Hide the normal page layout while the immersive overlay is open. */
+.bz-hidden {
+  display: none !important;
+}
+
+/* Dev-only: keep the Next.js dev-tools badge out of the immersive view
+   (it is fixed to a viewport corner and would sit on top of the bars).
+   The badge returns as soon as zoom mode is exited. */
+body:has(.bz-overlay) nextjs-portal {
+  display: none !important;
+}
+
+/* Soft fade when returning from zoom to the normal layout. */
+.bz-return {
+  animation: bz-return-in 260ms ease-out both;
+}
+
+/* ---------- Overlay shell & smart board sizing ---------- */
+
+.bz-overlay {
+  /* Layout budget: outer padding, top/bottom info bars, gaps. */
+  --bz-pad: 14px;
+  --bz-top-h: 56px;
+  --bz-bottom-h: 64px;
+  --bz-gap: 10px;
+  /* Reserved side-panel width (0 unless the panel is open on desktop). */
+  --bz-side-w: 0px;
+  --bz-side-gap: 0px;
+
+  /* Board = largest square that fits the remaining viewport height
+     AND the remaining width after padding + side panel. Pure CSS so it
+     recomputes automatically on every window resize / orientation change. */
+  --bz-board: min(
+    calc(100dvh - (var(--bz-pad) * 2) - var(--bz-top-h) - var(--bz-bottom-h) - (var(--bz-gap) * 2)),
+    calc(100vw - (var(--bz-pad) * 2) - var(--bz-side-w) - var(--bz-side-gap))
+  );
+
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bz-gap);
+  padding: var(--bz-pad);
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 700px at 50% -12%, rgba(16, 185, 129, 0.11), transparent 62%),
+    radial-gradient(950px 640px at 88% 112%, rgba(14, 165, 233, 0.09), transparent 60%),
+    radial-gradient(720px 520px at 4% 104%, rgba(168, 85, 247, 0.06), transparent 60%),
+    #070b14;
+  animation: bz-overlay-in 240ms ease-out both;
+}
+
+/* Open panel on desktop reserves real space — the board never overlaps it. */
+@media (min-width: 1024px) {
+  .bz-overlay.bz-panel-open {
+    --bz-side-w: 300px;
+    --bz-side-gap: 18px;
+  }
+  .bz-overlay.bz-panel-open .bz-stage {
+    padding-right: calc(var(--bz-side-w) + var(--bz-side-gap));
+  }
+}
+
+/* Short viewports (small laptops, landscape phones): compact the chrome
+   so the board keeps ~75%+ of the available height. */
+@media (max-height: 700px) {
+  .bz-overlay {
+    --bz-pad: 10px;
+    --bz-top-h: 48px;
+    --bz-bottom-h: 56px;
+    --bz-gap: 8px;
+  }
+  .bz-top,
+  .bz-bottom {
+    padding: 0 10px;
+    border-radius: 12px;
+  }
+}
+
+.bz-overlay.bz-closing {
+  animation: bz-overlay-out 200ms ease-in both;
+  pointer-events: none;
+}
+
+/* ---------- Info bars ---------- */
+
+.bz-top,
+.bz-bottom {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--bz-top-h);
+  padding: 0 14px;
+  border: 1px solid rgba(30, 41, 59, 0.9);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(17, 26, 46, 0.94), rgba(10, 15, 29, 0.94));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.bz-bottom {
+  height: var(--bz-bottom-h);
+}
+
+.bz-top {
+  animation: bz-bar-top-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bz-bottom {
+  animation: bz-bar-bottom-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------- Board stage ---------- */
+
+.bz-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bz-board-wrap {
+  flex: none;
+  width: var(--bz-board);
+  height: var(--bz-board);
+  animation: bz-board-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bz-closing .bz-board-wrap {
+  animation: bz-board-out 200ms ease-in both;
+}
+
+/* The board itself: piece glyphs scale with the board, premium glow. */
+.bz-overlay .bz-board {
+  --board-piece-size: calc(var(--bz-board) / 10.5);
+  box-shadow:
+    0 0 0 1px rgba(51, 65, 85, 0.55),
+    0 0 70px rgba(16, 185, 129, 0.13),
+    0 0 120px rgba(14, 165, 233, 0.07),
+    0 26px 90px rgba(0, 0, 0, 0.65);
+}
+
+/* Slightly larger coordinate labels on the big board. */
+.bz-overlay .bz-board .bz-coord {
+  font-size: clamp(10px, calc(var(--bz-board) / 64), 15px);
+}
+
+/* ---------- Compact control buttons ---------- */
+
+.bz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid rgb(51 65 85 / 0.9);
+  background: rgb(30 41 59 / 0.8);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgb(226 232 240);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease,
+    transform 120ms ease, color 150ms ease;
+}
+
+.bz-btn:hover {
+  background: rgb(51 65 85 / 0.9);
+  border-color: rgb(71 85 105);
+}
+
+.bz-btn:active {
+  transform: scale(0.95);
+}
+
+.bz-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bz-btn-danger {
+  border-color: rgb(244 63 94 / 0.35);
+  background: rgb(76 5 25 / 0.4);
+  color: rgb(253 164 175);
+}
+
+.bz-btn-danger:hover {
+  background: rgb(136 19 55 / 0.45);
+  border-color: rgb(244 63 94 / 0.55);
+}
+
+.bz-btn-primary {
+  border-color: rgb(16 185 129 / 0.45);
+  background: rgb(6 95 70 / 0.55);
+  color: rgb(209 250 229);
+}
+
+.bz-btn-primary:hover {
+  background: rgb(5 122 85 / 0.65);
+  border-color: rgb(16 185 129 / 0.7);
+  box-shadow: 0 0 16px rgb(16 185 129 / 0.25);
+}
+
+.bz-btn-exit {
+  border-color: rgb(16 185 129 / 0.45);
+  background: rgb(16 185 129 / 0.12);
+  color: rgb(110 231 183);
+}
+
+.bz-btn-exit:hover {
+  background: rgb(16 185 129 / 0.22);
+  border-color: rgb(52 211 153 / 0.7);
+  box-shadow: 0 0 18px rgb(16 185 129 / 0.35);
+}
+
+.bz-btn-icon {
+  padding: 8px;
+}
+
+.bz-kbd {
+  /* No display rule here: responsive `hidden` / `inline-flex` utilities
+     on the element must stay in control of visibility. */
+  align-items: center;
+  vertical-align: middle;
+  border-radius: 5px;
+  border: 1px solid rgb(71 85 105 / 0.8);
+  background: rgb(2 6 23 / 0.6);
+  padding: 2px 5px;
+  font-family: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgb(148 163 184);
+}
+
+/* ---------- Side panel (match info / moves / analysis) ---------- */
+
+.bz-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(320px, 86vw);
+  padding: 14px;
+  overflow-y: auto;
+  border: 1px solid rgb(30 41 59 / 0.95);
+  border-radius: 16px;
+  background: rgb(13 20 36 / 0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: -14px 0 44px rgba(0, 0, 0, 0.5);
+  transform: translateX(calc(100% + 24px));
+  visibility: hidden;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), visibility 260ms;
+}
+
+@media (min-width: 1024px) {
+  .bz-panel {
+    width: var(--bz-side-w);
+  }
+}
+
+.bz-panel-open .bz-panel {
+  transform: none;
+  visibility: visible;
+}
+
+/* Scrim only exists below desktop, where the panel slides over the stage. */
+.bz-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border-radius: 16px;
+  background: rgb(2 6 23 / 0.55);
+  backdrop-filter: blur(2px);
+  animation: bz-fade-in 200ms ease-out both;
+}
+
+@media (min-width: 1024px) {
+  .bz-scrim {
+    display: none;
+  }
+}
+
+/* ---------- Move strip & error toast ---------- */
+
+.bz-move-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 7px;
+  border: 1px solid rgb(30 41 59 / 0.9);
+  background: rgb(15 23 42 / 0.7);
+  padding: 4px 8px;
+  font-family: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(203 213 225);
+  white-space: nowrap;
+}
+
+.bz-move-chip-last {
+  border-color: rgb(251 191 36 / 0.4);
+  background: rgb(251 191 36 / 0.12);
+  color: rgb(252 211 77);
+}
+
+.bz-error {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--bz-bottom-h) + var(--bz-gap) + 10px);
+  z-index: 30;
+  transform: translateX(-50%);
+  max-width: min(90%, 480px);
+  border-radius: 12px;
+  border: 1px solid rgb(244 63 94 / 0.4);
+  background: rgb(76 5 25 / 0.85);
+  backdrop-filter: blur(8px);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(253 164 175);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: bz-fade-in 180ms ease-out both;
+}
+
+/* ---------- Themed scrollbars inside the overlay ---------- */
+
+.bz-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #2b3a52 rgba(15, 23, 42, 0.6);
+}
+
+.bz-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bz-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 8px;
+}
+
+.bz-scroll::-webkit-scrollbar-thumb {
+  background: #2b3a52;
+  border-radius: 8px;
+}
+
+.bz-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.55);
+}
+
+/* ---------- Motion ---------- */
+
+@keyframes bz-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bz-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes bz-board-in {
+  from {
+    opacity: 0.4;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bz-board-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes bz-bar-top-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bz-bar-bottom-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bz-return-in {
+  from {
+    opacity: 0.35;
+    transform: scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bz-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bz-overlay,
+  .bz-overlay.bz-closing,
+  .bz-board-wrap,
+  .bz-closing .bz-board-wrap,
+  .bz-top,
+  .bz-bottom,
+  .bz-return,
+  .bz-scrim,
+  .bz-error {
+    animation: none !important;
+  }
+  .bz-panel {
+    transition: none !important;
+  }
+}

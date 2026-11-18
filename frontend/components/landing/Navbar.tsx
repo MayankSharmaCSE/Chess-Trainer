@@ -7,6 +7,7 @@ const LINKS = [
   { href: "#how", label: "How it works" },
   { href: "#weaknesses", label: "Weakness map" },
   { href: "#progress", label: "Progress" },
+  { href: "/bots", label: "Bot Arena" },
   { href: "#faq", label: "FAQ" },
 ];
 

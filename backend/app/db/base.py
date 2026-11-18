@@ -60,7 +60,19 @@ def add_missing_columns(bind: Engine | None = None) -> list[str]:
 
 def init_db() -> None:
     # Import models so tables are registered before create_all.
-    from app.models import account, analysis, game, training, user  # noqa: F401
+    from app.models import account, analysis, bot, game, training, user  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     add_missing_columns(engine)
+
+    from app.models.bot import Bot, DEFAULT_BOTS
+
+    with SessionLocal() as db:
+        for b_data in DEFAULT_BOTS:
+            existing = db.get(Bot, b_data["id"])
+            if existing is None:
+                db.add(Bot(**b_data))
+            else:
+                for k, v in b_data.items():
+                    setattr(existing, k, v)
+        db.commit()

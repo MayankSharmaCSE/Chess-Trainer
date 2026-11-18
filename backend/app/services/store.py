@@ -41,7 +41,11 @@ def upsert_games(
             continue
         exists = (
             db.query(Game)
-            .filter(Game.platform == account.platform, Game.external_id == item["external_id"])
+            .filter(
+                Game.user_id == user_id,
+                Game.platform == account.platform,
+                Game.external_id == item["external_id"],
+            )
             .first()
         )
         if exists:
