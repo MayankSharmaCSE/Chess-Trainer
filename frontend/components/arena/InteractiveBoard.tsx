@@ -12,6 +12,11 @@ interface InteractiveBoardProps {
   isCheckmate?: boolean;
   onMove?: (from: string, to: string) => void;
   className?: string;
+  /** Side the human plays. Defaults to orientation; set this to allow flipping
+   *  the view while still moving pieces (used by Endgame Drills). */
+  playerColor?: "white" | "black";
+  /** Squares to pulse-highlight (e.g. a hint's best move). */
+  highlightSquares?: string[];
 }
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -44,6 +49,8 @@ export default function InteractiveBoard({
   isCheckmate = false,
   onMove,
   className = "",
+  playerColor,
+  highlightSquares,
 }: InteractiveBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [draggedSquare, setDraggedSquare] = useState<string | null>(null);
@@ -57,7 +64,8 @@ export default function InteractiveBoard({
   }, [fen]);
 
   const turn = game.turn(); // 'w' or 'b'
-  const isTurn = (orientation === "white" && turn === "w") || (orientation === "black" && turn === "b");
+  const moverColor = playerColor ?? orientation;
+  const isTurn = (moverColor === "white" && turn === "w") || (moverColor === "black" && turn === "b");
 
   // Determine legal destination squares for currently selected or dragged piece
   const activeSquare = selectedSquare || draggedSquare;
@@ -214,6 +222,11 @@ export default function InteractiveBoard({
                       <span className="absolute h-[28%] w-[28%] rounded-full bg-emerald-400/70 shadow-[0_0_8px_rgba(52,211,153,0.6)] z-10 pointer-events-none" />
                     )}
                   </>
+                )}
+
+                {/* Hint highlight (best-move suggestion) */}
+                {highlightSquares?.includes(sq) && (
+                  <span className="pointer-events-none absolute inset-0 z-[5] animate-pulse bg-violet-500/25 ring-4 ring-inset ring-violet-400/90" />
                 )}
 
                 {/* Piece Rendering with Drag & Drop */}

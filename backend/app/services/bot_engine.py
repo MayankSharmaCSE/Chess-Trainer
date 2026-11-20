@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import random
+import re
 import shutil
 import subprocess
 import time
@@ -166,7 +167,12 @@ class StockfishUCIProcess:
         raise TimeoutError("Engine timed out generating best move.")
 
     def evaluate_position(self, fen: str, depth: int = 10) -> dict[str, Any]:
-        """Evaluate a position and return score (White-POV cp/mate), best move, and PV."""
+        """Evaluate a position and return score (side-to-move POV cp/mate), best move, and PV.
+
+        The PV is taken from the deepest `info ... pv` line of THIS search only
+        (the process is created fresh per analysis, so no stale response can
+        leak in). Lower-depth iterations never overwrite a deeper PV.
+        """
         self.send(f"position fen {fen}")
         self.send(f"go depth {max(1, depth)}")
 
@@ -174,12 +180,19 @@ class StockfishUCIProcess:
         mate_moves: int | None = None
         best_uci: str | None = None
         pv_ucis: list[str] = []
+        pv_depth = 0
 
         deadline = time.time() + self.timeout
         while time.time() < deadline:
             line = self._readline().strip()
             if line.startswith("info") and "score" in line:
                 tokens = line.split()
+                info_depth = 0
+                if "depth" in tokens:
+                    try:
+                        info_depth = int(tokens[tokens.index("depth") + 1])
+                    except (ValueError, IndexError):
+                        info_depth = 0
                 if "cp" in tokens:
                     cp_idx = tokens.index("cp")
                     score_cp = int(tokens[cp_idx + 1])
@@ -189,13 +202,21 @@ class StockfishUCIProcess:
                     mate_moves = int(tokens[mate_idx + 1])
                     score_cp = None
 
-                if "pv" in tokens:
+                if "pv" in tokens and info_depth >= pv_depth:
                     pv_idx = tokens.index("pv")
-                    pv_ucis = tokens[pv_idx + 1 : pv_idx + 6]
+                    # Capture the FULL principal variation (mate drills need the
+                    # complete mating line, not just the first few plies).
+                    candidate = [
+                        t for t in tokens[pv_idx + 1:]
+                        if re.fullmatch(r"[a-h][1-8][a-h][1-8][qrbn]?", t)
+                    ]
+                    if candidate:
+                        pv_ucis = candidate
+                        pv_depth = info_depth
 
             if line.startswith("bestmove"):
                 parts = line.split()
-                if len(parts) >= 2:
+                if len(parts) >= 2 and re.fullmatch(r"[a-h][1-8][a-h][1-8][qrbn]?", parts[1]):
                     best_uci = parts[1]
                 break
 
@@ -204,6 +225,7 @@ class StockfishUCIProcess:
             "mate_moves": mate_moves,
             "best_uci": best_uci,
             "pv_ucis": pv_ucis,
+            "depth": pv_depth,
         }
 
     def close(self) -> None:

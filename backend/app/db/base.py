@@ -34,6 +34,9 @@ ADDITIVE_COLUMNS: dict[str, list[str]] = {
         "coaching_reveal",
         "coaching_reveal_source",
     ],
+    "endgame_attempts": [
+        "session_id",
+    ],
 }
 
 
@@ -60,7 +63,7 @@ def add_missing_columns(bind: Engine | None = None) -> list[str]:
 
 def init_db() -> None:
     # Import models so tables are registered before create_all.
-    from app.models import account, analysis, bot, game, training, user  # noqa: F401
+    from app.models import account, analysis, bot, endgame, game, training, user  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     add_missing_columns(engine)

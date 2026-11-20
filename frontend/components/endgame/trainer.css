@@ -1,0 +1,38 @@
+/* Chess.com-style Endgame Trainer layout: board left, navigation panel right. */
+
+/* Board sizing: fill the width on mobile; on desktop stay within the viewport
+   height so the board, controls and feedback fit without scrolling. */
+.eg-board-wrap {
+  width: min(100%, 720px);
+}
+@media (min-width: 1024px) {
+  .eg-board-wrap {
+    width: min(100%, calc(100vh - 235px), 760px);
+  }
+}
+
+/* Right navigation panel: subtle independent scrollbar on desktop. */
+.eg-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(51 65 85) transparent;
+}
+.eg-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.eg-panel::-webkit-scrollbar-thumb {
+  background: rgb(51 65 85);
+  border-radius: 8px;
+}
+.eg-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Smooth category accordion handled by grid-rows utilities in the component;
+   respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  .eg-panel *,
+  .eg-board-wrap * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

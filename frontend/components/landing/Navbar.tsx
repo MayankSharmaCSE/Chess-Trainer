@@ -8,6 +8,7 @@ const LINKS = [
   { href: "#weaknesses", label: "Weakness map" },
   { href: "#progress", label: "Progress" },
   { href: "/bots", label: "Bot Arena" },
+  { href: "/endgame", label: "Endgame Drills" },
   { href: "#faq", label: "FAQ" },
 ];
 
