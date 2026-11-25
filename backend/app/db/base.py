@@ -42,6 +42,9 @@ ADDITIVE_COLUMNS: dict[str, list[str]] = {
         "password_changed_at",
         "session_version",
     ],
+    "password_reset_tokens": [
+        "sent_at",
+    ],
 }
 
 

@@ -21,7 +21,9 @@ def outbox(monkeypatch):
     sent: list[dict] = []
     monkeypatch.setattr(
         routes_auth, "_send_in_background",
-        lambda to, subject, text, html: sent.append({"to": to, "subject": subject, "text": text, "html": html}),
+        lambda to, subject, text, html, token_id: sent.append(
+            {"to": to, "subject": subject, "text": text, "html": html, "token_id": token_id}
+        ),
     )
     return sent
 
@@ -144,3 +146,39 @@ def test_console_provider_when_unconfigured(monkeypatch):
     assert mailer.status()["provider"] == "console"
     assert mailer.status()["sends_real_email"] is False
     mailer.send_email("u@example.com", "s", "t", "h")  # logs, never raises
+
+
+def test_failed_sends_do_not_use_up_the_rate_limit(client: TestClient, outbox):
+    """Regression: emails the provider rejected (e.g. Brevo IP block) used to
+    count toward the 3/hour limit, locking the user out after the fix."""
+    _signup(client, "unlucky")
+    for _ in range(3):
+        client.post("/api/auth/forgot-password", json={"identifier": "unlucky"})
+    assert len(outbox) == 3
+    # Those sends "failed" (sent_at stays NULL) and are now past the pending grace.
+    with SessionLocal() as db:
+        for row in db.query(PasswordResetToken).filter(PasswordResetToken.id.in_([m["token_id"] for m in outbox])):
+            row.created_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        db.commit()
+    client.post("/api/auth/forgot-password", json={"identifier": "unlucky"})
+    assert len(outbox) == 4  # not rate-limited
+
+
+def test_successful_send_marks_token_sent(client: TestClient, monkeypatch):
+    _signup(client, "marksent")
+    captured = {}
+    monkeypatch.setattr(mailer, "send_email", lambda *a: captured.setdefault("sent", True))
+
+    class Inline:  # run the background thread inline
+        def __init__(self, target, **_):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(routes_auth.threading, "Thread", Inline)
+    client.post("/api/auth/forgot-password", json={"identifier": "marksent"})
+    assert captured.get("sent")
+    with SessionLocal() as db:
+        row = db.query(PasswordResetToken).order_by(PasswordResetToken.id.desc()).first()
+        assert row.sent_at is not None

@@ -36,3 +36,6 @@ class PasswordResetToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set once the email actually went out. Failed sends never count toward
+    # the hourly rate limit (they'd lock the user out for an hour).
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

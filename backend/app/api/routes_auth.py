@@ -17,7 +17,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.db.base import get_db
+from app.db.base import SessionLocal, get_db
 from app.models.user import PasswordResetToken, User
 from app.schemas.auth import (
     ForgotPasswordIn,
@@ -138,15 +138,27 @@ If the button doesn't work, paste this into your browser:<br>{link}</p>
     return subject, text, html
 
 
-def _send_in_background(to: str, subject: str, text: str, html: str) -> None:
+# A request still being sent counts toward the limit for this long, so firing
+# many requests at once can't slip past it before any send completes.
+PENDING_GRACE = timedelta(minutes=2)
+
+
+def _send_in_background(to: str, subject: str, text: str, html: str, token_id: int) -> None:
     """Send off the request thread: the response time is then the same whether
-    or not the account exists (no account probing by timing)."""
+    or not the account exists (no account probing by timing). Marks the token
+    as sent on success; failures are logged and don't use up the rate limit."""
 
     def run() -> None:
         try:
             mailer.send_email(to, subject, text, html)
         except mailer.MailError as e:
             logger.error("Password reset email to user failed: %s", e)
+            return
+        with SessionLocal() as db:
+            row = db.get(PasswordResetToken, token_id)
+            if row is not None:
+                row.sent_at = _utcnow()
+                db.commit()
 
     threading.Thread(target=run, name="reset-mail", daemon=True).start()
 
@@ -181,6 +193,10 @@ def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)) -> di
         .filter(
             PasswordResetToken.user_id == user.id,
             PasswordResetToken.created_at >= now - timedelta(hours=1),
+            or_(
+                PasswordResetToken.sent_at.is_not(None),
+                PasswordResetToken.created_at >= now - PENDING_GRACE,
+            ),
         )
         .count()
     )
@@ -193,18 +209,17 @@ def forgot_password(body: ForgotPasswordIn, db: Session = Depends(get_db)) -> di
         PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None)
     ).update({"used_at": now}, synchronize_session=False)
     token = secrets.token_urlsafe(32)
-    db.add(
-        PasswordResetToken(
-            user_id=user.id,
-            token_hash=_hash_token(token),
-            created_at=now,
-            expires_at=now + timedelta(minutes=PASSWORD_RESET_TTL_MIN),
-        )
+    row = PasswordResetToken(
+        user_id=user.id,
+        token_hash=_hash_token(token),
+        created_at=now,
+        expires_at=now + timedelta(minutes=PASSWORD_RESET_TTL_MIN),
     )
+    db.add(row)
     db.commit()
 
     link = f"{FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
-    _send_in_background(user.email, *_reset_email(user, link))
+    _send_in_background(user.email, *_reset_email(user, link), token_id=row.id)
     return generic
 
 
