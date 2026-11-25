@@ -102,6 +102,9 @@ export default function DashboardPage() {
           <Link href="/games" className="rounded-[10px] border border-[#D5DCE4] bg-white px-4 py-2 font-semibold text-[#13233A] hover:border-[#13233A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#13233A]">
             Game library
           </Link>
+          <Link href="/profile" className="rounded-[10px] bg-[#C8372D] px-4 py-2 font-semibold text-white hover:bg-[#AD2C23] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C8372D]">
+            Player profile
+          </Link>
         </div>
       </main>
     </div>
