@@ -161,7 +161,7 @@ def grade_attempt(db: Session, user_id: int, drill_id: int, played_uci: str) -> 
 
             try:
                 drill.acceptable_ucis = compute_acceptable(drill.fen_before, drill.best_uci)
-            except (OSError, chess.engine.EngineError, ValueError):
+            except (OSError, RuntimeError, chess.engine.EngineError, ValueError):  # RuntimeError: engine busy
                 drill.acceptable_ucis = [drill.best_uci]  # engine down: exact-only
             db.commit()
         acceptable = list(drill.acceptable_ucis or [])

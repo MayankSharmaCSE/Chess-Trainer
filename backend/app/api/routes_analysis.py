@@ -1,9 +1,11 @@
 """US-005: Stockfish analysis over saved games (async: 202 pending -> poll)."""
 
+import logging
+import queue
+import threading
 from datetime import datetime, timezone
 
-from anyio import to_thread
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -16,6 +18,36 @@ from app.schemas.analysis import AnalysisOut, AnalysisStatusOut, MoveAnalysisOut
 from app.services import engine
 
 router = APIRouter(prefix="/api", tags=["analysis"])
+
+logger = logging.getLogger("chesslens.analysis")
+
+# Game analyses run on ONE dedicated worker thread fed by an in-memory queue:
+# - one Stockfish at a time (each is ~250 MB; see services/engine_slots), so
+#   "analyze every game" queues instead of OOM-killing the container;
+# - a queued job holds no DB connection and no threadpool thread. (FastAPI
+#   BackgroundTasks keep the request's DB session open until the task ends,
+#   so 15+ queued games exhausted the pool and broke every other request.)
+# The queue is lost on restart; reset_interrupted_analyses() covers that.
+_jobs: "queue.Queue[tuple[int, str, int, str | None]]" = queue.Queue()
+_worker: threading.Thread | None = None
+_worker_lock = threading.Lock()
+
+
+INTERRUPTED_ERROR = "Analysis was interrupted because the server restarted. Click Retry."
+
+
+def reset_interrupted_analyses() -> int:
+    """Startup hook: 'pending' rows left by a crash/redeploy can never finish
+    (the in-memory queue is gone), so mark them failed so the UI offers Retry
+    instead of spinning forever."""
+    with SessionLocal() as db:
+        n = (
+            db.query(GameAnalysis)
+            .filter(GameAnalysis.status == "pending")
+            .update({"status": "failed", "error": INTERRUPTED_ERROR}, synchronize_session=False)
+        )
+        db.commit()
+    return n
 
 
 def _status_of(a: GameAnalysis) -> AnalysisStatusOut:
@@ -39,27 +71,15 @@ def _get_game(game_id: int, user_id: int, db: Session) -> Game:
     return game
 
 
-async def _run_analysis(analysis_id: int, pgn: str, depth: int, user_color: str | None) -> None:
-    db = SessionLocal()
-    try:
+def _save_analysis(analysis_id: int, result: dict | None = None, error: str | None = None) -> None:
+    """Write the outcome in one short-lived session (runs in a worker thread)."""
+    with SessionLocal() as db:
         analysis = db.get(GameAnalysis, analysis_id)
         if analysis is None:
             return
-        try:
-            result = await to_thread.run_sync(
-                lambda: engine.analyze_game(pgn, depth, user_color, STOCKFISH_PATH)
-            )
-        except (OSError, FileNotFoundError):
+        if error is not None or result is None:
             analysis.status = "failed"
-            analysis.error = (
-                f"Stockfish binary not found at '{STOCKFISH_PATH}'. "
-                "Set STOCKFISH_PATH to a Stockfish 16+ binary."
-            )
-            db.commit()
-            return
-        except Exception as e:  # noqa: BLE001 - surfaced as failed status
-            analysis.status = "failed"
-            analysis.error = f"Analysis failed: {e}"
+            analysis.error = error or "Analysis failed."
             db.commit()
             return
         db.query(MoveAnalysis).filter(MoveAnalysis.analysis_id == analysis.id).delete()
@@ -74,21 +94,56 @@ async def _run_analysis(analysis_id: int, pgn: str, depth: int, user_color: str 
         analysis.inaccuracy_count = counts.get("INACCURACY", 0)
         analysis.completed_at = datetime.now(timezone.utc)
         db.commit()
-    finally:
-        db.close()
+
+
+def _process(analysis_id: int, pgn: str, depth: int, user_color: str | None) -> None:
+    try:
+        result = engine.analyze_game(pgn, depth, user_color, STOCKFISH_PATH)
+    except (OSError, FileNotFoundError):
+        _save_analysis(
+            analysis_id,
+            error=f"Stockfish binary not found at '{STOCKFISH_PATH}'. "
+            "Set STOCKFISH_PATH to a Stockfish 16+ binary.",
+        )
+        return
+    except Exception as e:  # noqa: BLE001 - surfaced as failed status
+        _save_analysis(analysis_id, error=f"Analysis failed: {e}")
+        return
+    _save_analysis(analysis_id, result=result)
+
+
+def _worker_loop() -> None:
+    while True:
+        job = _jobs.get()
+        try:
+            _process(*job)
+        except Exception:  # noqa: BLE001 - never let one job kill the worker
+            logger.exception("Analysis job %s crashed", job[0])
+        finally:
+            _jobs.task_done()
+
+
+def _enqueue(analysis_id: int, pgn: str, depth: int, user_color: str | None) -> None:
+    global _worker
+    with _worker_lock:
+        if _worker is None or not _worker.is_alive():
+            _worker = threading.Thread(target=_worker_loop, name="analysis-worker", daemon=True)
+            _worker.start()
+    _jobs.put((analysis_id, pgn, depth, user_color))
 
 
 @router.post("/games/{game_id}/analyze", response_model=AnalysisStatusOut, status_code=202)
 def analyze(
     game_id: int,
-    background: BackgroundTasks,
     depth: int = Query(default=ANALYSIS_DEFAULT_DEPTH, ge=1, le=ANALYSIS_MAX_DEPTH),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AnalysisStatusOut:
     game = _get_game(game_id, user.id, db)
     existing = db.query(GameAnalysis).filter(GameAnalysis.game_id == game.id).first()
-    if existing and existing.status == "done" and existing.depth == depth:
+    if existing and existing.status in ("done", "pending") and existing.depth == depth:
+        # done: nothing to do. pending: already queued/running; a second click
+        # must not queue the same game twice.
         return _status_of(existing)
     if existing is None:
         existing = GameAnalysis(game_id=game.id, user_id=user.id, depth=depth)
@@ -101,7 +156,7 @@ def analyze(
         existing.completed_at = None
     db.commit()
     db.refresh(existing)
-    background.add_task(_run_analysis, existing.id, game.pgn, depth, game.user_color)
+    _enqueue(existing.id, game.pgn, depth, game.user_color)
     return _status_of(existing)
 
 

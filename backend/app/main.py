@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes_analysis import router as analysis_router
+from app.api.routes_analysis import reset_interrupted_analyses, router as analysis_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_bots import router as bots_router
 from app.api.routes_endgame import router as endgame_router
@@ -19,6 +19,7 @@ from app.db.base import init_db
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    reset_interrupted_analyses()
     yield
 
 

@@ -20,6 +20,7 @@ import chess
 import chess.pgn
 
 from app.core.config import ANALYSIS_MAX_DEPTH, STOCKFISH_PATH
+from app.services.engine_slots import slots
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,19 @@ class StockfishUCIProcess:
         self.path = resolve_stockfish_path(binary_path or STOCKFISH_PATH)
         self.timeout = timeout
         self.proc: subprocess.Popen[str] | None = None
-        self._start_process()
+        # ~250 MB per process: hold an engine slot for its whole lifetime.
+        slots.acquire()
+        self._has_slot = True
+        try:
+            self._start_process()
+        except BaseException:
+            self._release_slot()
+            raise
+
+    def _release_slot(self) -> None:
+        if getattr(self, "_has_slot", False):
+            self._has_slot = False
+            slots.release()
 
     def _start_process(self) -> None:
         if not os.path.isfile(self.path):
@@ -238,6 +251,7 @@ class StockfishUCIProcess:
             pass
         finally:
             self.proc = None
+            self._release_slot()
 
     def __enter__(self) -> StockfishUCIProcess:
         return self

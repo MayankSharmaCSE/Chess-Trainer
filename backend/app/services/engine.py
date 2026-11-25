@@ -10,6 +10,7 @@ import chess.engine
 import chess.pgn
 
 from app.core.config import ANALYSIS_MAX_DEPTH, STOCKFISH_PATH
+from app.services.engine_slots import analysis_lock, slots
 
 MATE_CP = 100_000
 BLUNDER_MIN = 300
@@ -70,11 +71,12 @@ def _split(score: chess.engine.Score) -> tuple[int | None, int | None]:
 
 def get_engine_version(engine_path: str = STOCKFISH_PATH) -> str | None:
     try:
-        engine = chess.engine.SimpleEngine.popen_uci(engine_path)
-        name = engine.id.get("name")
-        engine.quit()
+        with slots.slot():
+            engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+            name = engine.id.get("name")
+            engine.quit()
         return str(name) if name else None
-    except (OSError, chess.engine.EngineError):
+    except (OSError, RuntimeError, chess.engine.EngineError):
         return None
 
 
@@ -91,72 +93,95 @@ def analyze_game(
         raise ValueError("Could not parse PGN.")
     moves = list(game.mainline_moves())[:MAX_PLIES]
 
-    engine = chess.engine.SimpleEngine.popen_uci(engine_path)
-    try:
-        version = str(engine.id.get("name") or "")
-        board = game.board()
-        positions = [board.copy()]
-        for m in moves:
-            board.push(m)
-            positions.append(board.copy())
+    board = game.board()
+    positions = [board.copy()]
+    for m in moves:
+        board.push(m)
+        positions.append(board.copy())
+    version, white_evals, best_ucis, pvs = _evaluate_positions(positions, depth, engine_path)
 
-        white_evals: list[chess.engine.Score] = []
-        best_ucis: list[str | None] = []
-        pvs: list[list[str]] = []
-        for pos in positions:
-            info = engine.analyse(pos, chess.engine.Limit(depth=depth))
-            white_evals.append(info["score"].pov(chess.WHITE))
-            pv = info.get("pv") or []
-            best_ucis.append(pv[0].uci() if pv else None)
-            pv_sans: list[str] = []
-            pv_board = pos.copy()
-            for pv_move in pv[:4]:
-                try:
-                    pv_sans.append(pv_board.san(pv_move))
-                    pv_board.push(pv_move)
-                except (ValueError, chess.InvalidMoveError):
-                    break
-            pvs.append(pv_sans)
+    out: list[dict] = []
+    counts = {"BLUNDER": 0, "MISTAKE": 0, "INACCURACY": 0}
+    for i, move in enumerate(moves):
+        pos = positions[i]
+        mover_is_white = pos.turn == chess.WHITE
+        loss = mover_loss(white_evals[i], white_evals[i + 1], mover_is_white)
+        cls = classify_loss(loss)
+        if cls:
+            counts[cls] += 1
+        probe = pos.copy()
+        best_san = None
+        if best_ucis[i]:
+            try:
+                best_san = probe.san(chess.Move.from_uci(best_ucis[i]))  # type: ignore[arg-type]
+            except (ValueError, chess.InvalidMoveError):
+                best_san = None
+        e_before, m_before = _split(white_evals[i])
+        e_after, m_after = _split(white_evals[i + 1])
+        out.append(
+            {
+                "ply": i + 1,
+                "played_san": pos.san(move),
+                "played_uci": move.uci(),
+                "best_san": best_san,
+                "best_uci": best_ucis[i],
+                "pv_sans": pvs[i],
+                "eval_before_cp": e_before,
+                "mate_before": m_before,
+                "eval_after_cp": e_after,
+                "mate_after": m_after,
+                "cp_loss": loss,
+                "classification": cls,
+                "is_user_move": user_color in ("white", "black")
+                and ((user_color == "white") == mover_is_white),
+            }
+        )
+    return {"moves": out, "counts": counts, "engine_version": version, "depth": depth}
 
-        out: list[dict] = []
-        counts = {"BLUNDER": 0, "MISTAKE": 0, "INACCURACY": 0}
-        for i, move in enumerate(moves):
-            pos = positions[i]
-            mover_is_white = pos.turn == chess.WHITE
-            loss = mover_loss(white_evals[i], white_evals[i + 1], mover_is_white)
-            cls = classify_loss(loss)
-            if cls:
-                counts[cls] += 1
-            probe = pos.copy()
-            best_san = None
-            if best_ucis[i]:
-                try:
-                    best_san = probe.san(chess.Move.from_uci(best_ucis[i]))  # type: ignore[arg-type]
-                except (ValueError, chess.InvalidMoveError):
-                    best_san = None
-            e_before, m_before = _split(white_evals[i])
-            e_after, m_after = _split(white_evals[i + 1])
-            out.append(
-                {
-                    "ply": i + 1,
-                    "played_san": pos.san(move),
-                    "played_uci": move.uci(),
-                    "best_san": best_san,
-                    "best_uci": best_ucis[i],
-                    "pv_sans": pvs[i],
-                    "eval_before_cp": e_before,
-                    "mate_before": m_before,
-                    "eval_after_cp": e_after,
-                    "mate_after": m_after,
-                    "cp_loss": loss,
-                    "classification": cls,
-                    "is_user_move": user_color in ("white", "black")
-                    and ((user_color == "white") == mover_is_white),
-                }
-            )
-        return {"moves": out, "counts": counts, "engine_version": version, "depth": depth}
-    finally:
+
+def _evaluate_positions(
+    positions: list[chess.Board], depth: int, engine_path: str
+) -> tuple[str, list[chess.engine.Score], list[str | None], list[list[str]]]:
+    """Evaluate every position with ONE Stockfish process, memory-safely.
+
+    Analyses queue on `analysis_lock` (one game at a time) and hold an engine
+    slot (see engine_slots). Between positions, if an interactive caller is
+    waiting, the engine is shut down and the slot handed over, then the
+    analysis respawns and continues where it left off.
+    """
+    white_evals: list[chess.engine.Score] = []
+    best_ucis: list[str | None] = []
+    pvs: list[list[str]] = []
+    with analysis_lock:
+        slots.acquire(timeout=None)
+        engine = None
         try:
-            engine.quit()
-        except chess.engine.EngineError:
-            pass
+            engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+            version = str(engine.id.get("name") or "")
+            for pos in positions:
+                if slots.contended():
+                    engine.quit()
+                    engine = None
+                    slots.yield_to_waiters()
+                    engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+                info = engine.analyse(pos, chess.engine.Limit(depth=depth))
+                white_evals.append(info["score"].pov(chess.WHITE))
+                pv = info.get("pv") or []
+                best_ucis.append(pv[0].uci() if pv else None)
+                pv_sans: list[str] = []
+                pv_board = pos.copy()
+                for pv_move in pv[:4]:
+                    try:
+                        pv_sans.append(pv_board.san(pv_move))
+                        pv_board.push(pv_move)
+                    except (ValueError, chess.InvalidMoveError):
+                        break
+                pvs.append(pv_sans)
+        finally:
+            if engine is not None:
+                try:
+                    engine.quit()
+                except chess.engine.EngineError:
+                    pass
+            slots.release()
+    return version, white_evals, best_ucis, pvs

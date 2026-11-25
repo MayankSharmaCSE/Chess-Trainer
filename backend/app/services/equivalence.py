@@ -15,6 +15,7 @@ import chess.engine
 
 from app.core.config import STOCKFISH_PATH
 from app.services.engine import mover_value
+from app.services.engine_slots import slots
 
 EQUIV_CP_TOLERANCE = 15
 EQUIV_DEPTH = 15
@@ -37,30 +38,31 @@ def compute_acceptable(
     if best_move not in legal:
         return [best_uci]
 
-    engine = chess.engine.SimpleEngine.popen_uci(engine_path)
-    try:
-        mover_is_white = board.turn == chess.WHITE
-        # Fast path: use MultiPV once, then score only candidates near the top.
-        info = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=min(EQUIV_MULTIPV, len(legal)))
-        ranked: list[tuple[int, str]] = []
-        for slot in info:
-            pv = slot.get("pv") or []
-            if not pv:
-                continue
-            score = slot["score"].pov(chess.WHITE)
-            ranked.append((mover_value(score, mover_is_white), pv[0].uci()))
-        if not ranked:
-            return [best_uci]
-        best_value = max(v for v, _ in ranked)
-        acceptable = [uci for v, uci in ranked if best_value - v <= EQUIV_CP_TOLERANCE]
-        if best_uci not in acceptable:
-            acceptable.append(best_uci)
-        return acceptable
-    finally:
+    with slots.slot():  # ~250 MB process; see engine_slots
+        engine = chess.engine.SimpleEngine.popen_uci(engine_path)
         try:
-            engine.quit()
-        except chess.engine.EngineError:
-            pass
+            mover_is_white = board.turn == chess.WHITE
+            # Fast path: use MultiPV once, then score only candidates near the top.
+            info = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=min(EQUIV_MULTIPV, len(legal)))
+            ranked: list[tuple[int, str]] = []
+            for slot in info:
+                pv = slot.get("pv") or []
+                if not pv:
+                    continue
+                score = slot["score"].pov(chess.WHITE)
+                ranked.append((mover_value(score, mover_is_white), pv[0].uci()))
+            if not ranked:
+                return [best_uci]
+            best_value = max(v for v, _ in ranked)
+            acceptable = [uci for v, uci in ranked if best_value - v <= EQUIV_CP_TOLERANCE]
+            if best_uci not in acceptable:
+                acceptable.append(best_uci)
+            return acceptable
+        finally:
+            try:
+                engine.quit()
+            except chess.engine.EngineError:
+                pass
 
 
 def is_equivalent(fen_before: str, played_uci: str, best_uci: str, acceptable: list[str] | None) -> bool:
