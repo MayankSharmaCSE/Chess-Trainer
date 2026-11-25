@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { backendUrl, cookieOptions, SESSION_COOKIE } from "../_lib";
+import { BACKEND_DOWN_MESSAGE, backendUrl, cookieOptions, SESSION_COOKIE } from "../_lib";
 
 const USERNAME_RE = /^[A-Za-z0-9_-]{3,30}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     });
   } catch {
     return NextResponse.json(
-      { error: "Backend is not running. Start it on :8000 and retry." },
+      { error: BACKEND_DOWN_MESSAGE },
       { status: 503 }
     );
   }

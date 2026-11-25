@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { backendUrl, SESSION_COOKIE } from "../../auth/_lib";
+import { BACKEND_DOWN_MESSAGE, backendUrl, SESSION_COOKIE } from "../../auth/_lib";
 
 /** Generic Backend-for-Frontend proxy: /api/bff/<path...> -> <backend>/api/<path...>.
  * Attaches the session cookie as a Bearer token. Auth cookie handling
@@ -25,7 +25,7 @@ async function forward(request: NextRequest, path: string[]) {
     upstream = await fetch(url, init);
   } catch {
     return NextResponse.json(
-      { error: "Backend is not running. Start it on :8000 and retry." },
+      { error: BACKEND_DOWN_MESSAGE },
       { status: 503 }
     );
   }

@@ -72,7 +72,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       if (!res.ok) {
         setStatus(
           data?.detail || data?.error || (res.status === 503
-            ? "Backend is not running. Start it on :8000 and retry."
+            ? "The server is waking up or briefly unavailable. Please retry in a minute."
             : res.status === 409
               ? "That username or email is already registered."
               : res.status === 401

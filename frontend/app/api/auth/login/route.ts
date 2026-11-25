@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { backendUrl, cookieOptions, SESSION_COOKIE } from "../_lib";
+import { BACKEND_DOWN_MESSAGE, backendUrl, cookieOptions, SESSION_COOKIE } from "../_lib";
 
 export async function POST(request: Request) {
   let body: { identifier?: string; password?: string };
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     });
   } catch {
     return NextResponse.json(
-      { error: "Backend is not running. Start it on :8000 and retry." },
+      { error: BACKEND_DOWN_MESSAGE },
       { status: 503 }
     );
   }

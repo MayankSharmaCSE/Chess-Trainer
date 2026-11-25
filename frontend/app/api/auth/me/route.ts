@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { backendUrl, SESSION_COOKIE } from "../_lib";
+import { BACKEND_DOWN_MESSAGE, backendUrl, SESSION_COOKIE } from "../_lib";
 
 export async function GET(request: NextRequest) {
   const bearer = request.cookies.get(SESSION_COOKIE)?.value;
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     });
   } catch {
     return NextResponse.json(
-      { error: "Backend is not running. Start it on :8000 and retry." },
+      { error: BACKEND_DOWN_MESSAGE },
       { status: 503 }
     );
   }
