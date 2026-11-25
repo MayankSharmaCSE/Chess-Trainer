@@ -4,6 +4,12 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-change-me")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "7"))
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data.db")
+# Hosts (e.g. Render) hand out "postgres://" or "postgresql://"; pin the
+# psycopg 3 driver explicitly so the URL works on any SQLAlchemy 2.x.
+for _prefix in ("postgres://", "postgresql://"):
+    if DATABASE_URL.startswith(_prefix):
+        DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_prefix):]
+        break
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 STOCKFISH_PATH = os.getenv("STOCKFISH_PATH", "stockfish")
 ANALYSIS_DEFAULT_DEPTH = int(os.getenv("ANALYSIS_DEFAULT_DEPTH", "15"))

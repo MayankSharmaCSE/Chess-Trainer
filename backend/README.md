@@ -28,8 +28,8 @@ Docs: `http://localhost:8000/docs`
 ## Env
 
 See `.env.example`. `DATABASE_URL` defaults to SQLite `./data.db`.
-For Postgres: `DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/chesslens`
-(then add `psycopg2-binary` to requirements).
+For Postgres: `DATABASE_URL=postgresql://user:pass@localhost:5432/chesslens`
+(`psycopg[binary]` is in requirements; `postgres://` URLs are normalized).
 
 ## AI coaching (optional, US-009 Option B)
 
