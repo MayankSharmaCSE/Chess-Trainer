@@ -15,7 +15,11 @@ uvicorn app.main:app --reload --port 8000 --env-file .env
 `--env-file .env` matters: `app/core/config.py` only reads `os.getenv`, so without it
 `.env` (JWT_SECRET, LLM_*) is ignored and defaults are used.
 
-Health: `GET http://localhost:8000/healthz`
+Health:
+- `GET /healthz`: liveness only (Render health check), `{"ok": true}`.
+- `GET /api/health`: database, Stockfish, AI-coaching config. 200 ok / 503 degraded.
+- `GET /api/health/ai` (logged in): one live LLM call with the coaching settings;
+  shows latency, `model_used`, or the provider error. In the browser: `/api/bff/health/ai`.
 Docs: `http://localhost:8000/docs`
 
 ## Auth contract (frozen for frontend)
@@ -42,6 +46,7 @@ via `LLM_BASE_URL`). Without a key the app runs normally and
 - `{"level": "reveal"}`: Stockfish's best move + line are sent and the LLM explains them. The UI's
   "Need a hint?" button shows the best move first, then this explanation (works before solving).
 - Response: `{level, text, source}` with `source` = `llm` or `rules-v1` (timeout / failed validation fallback).
+- OpenRouter: set `LLM_FALLBACK_MODELS` (comma-separated) to fail over on 429/downtime.
 - Cached per drill + level in `training_drills`; `init_db()` adds the coaching columns to older `data.db` files.
 
 ## Tests

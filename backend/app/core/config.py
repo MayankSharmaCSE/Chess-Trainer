@@ -28,3 +28,9 @@ LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "150"))
 # Optional: sent as `reasoning_effort` for thinking models (Qwen/GPT-OSS/Gemini).
 # e.g. "none" (Ollama Qwen, Groq Qwen), "low" (GPT-OSS, Gemini 3). Empty = not sent.
 LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "").strip()
+# OpenRouter only: comma-separated backup models, tried in order when LLM_MODEL
+# errors (429 rate limit, downtime). Sent as the `models` array. Empty = off,
+# so other OpenAI-compatible providers never see the unknown field.
+LLM_FALLBACK_MODELS = [
+    m.strip() for m in os.getenv("LLM_FALLBACK_MODELS", "").split(",") if m.strip()
+]

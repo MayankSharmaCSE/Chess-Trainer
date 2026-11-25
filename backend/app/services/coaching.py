@@ -24,6 +24,7 @@ import httpx
 from app.core.config import (
     LLM_API_KEY,
     LLM_BASE_URL,
+    LLM_FALLBACK_MODELS,
     LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_REASONING_EFFORT,
@@ -134,6 +135,15 @@ def build_user_message(
 
 def _call_provider(system: str, user: str) -> str:
     """One Chat Completions call over httpx. Raises on transport/API errors."""
+    return complete(system, user)[0]
+
+
+def complete(system: str, user: str) -> tuple[str, str | None]:
+    """Chat Completions call -> (reply text, model that actually answered).
+
+    Shared by coaching and the live health check so both send identical
+    settings. Raises on transport/API errors and on empty replies.
+    """
     payload = {
         "model": LLM_MODEL,
         "messages": [
@@ -145,6 +155,10 @@ def _call_provider(system: str, user: str) -> str:
     }
     if LLM_REASONING_EFFORT:
         payload["reasoning_effort"] = LLM_REASONING_EFFORT
+    if LLM_FALLBACK_MODELS:
+        # OpenRouter: `model` is tried first, then these in order on any error
+        # (including upstream 429s on shared :free pools).
+        payload["models"] = LLM_FALLBACK_MODELS
     resp = httpx.post(
         f"{LLM_BASE_URL}/chat/completions",
         headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"},
@@ -153,6 +167,9 @@ def _call_provider(system: str, user: str) -> str:
     )
     resp.raise_for_status()
     data = resp.json()
+    used = data.get("model")
+    if LLM_FALLBACK_MODELS and used and not str(used).startswith(LLM_MODEL.split(":")[0]):
+        logger.warning("AI coaching: %s unavailable, answered by fallback %s", LLM_MODEL, used)
     choice = (data.get("choices") or [{}])[0]
     message = choice.get("message", {})
     raw = message.get("content") or ""
@@ -167,7 +184,7 @@ def _call_provider(system: str, user: str) -> str:
             f"Empty reply (finish_reason={choice.get('finish_reason')}, model was thinking: {thought}). "
             + ("Set LLM_REASONING_EFFORT (e.g. none/low) or raise LLM_MAX_TOKENS." if thought else "")
         )
-    return text
+    return text, used
 
 
 def _san_core(san: str) -> str:
