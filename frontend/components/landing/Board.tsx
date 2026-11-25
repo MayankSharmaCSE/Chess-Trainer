@@ -17,6 +17,10 @@ interface BoardProps {
   hintSquare?: string | null;
   onMove?: (from: string, to: string) => void;
   label: string; // accessible description of the position
+  /** Hide rank/file labels for compact thumbnails (defaults to true). */
+  showCoordinates?: boolean;
+  /** Override the piece glyph size class (defaults to the landing board size). */
+  pieceSize?: string;
 }
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -30,7 +34,7 @@ function center(sq: string) {
   return { x: f + 0.5, y: 8 - r + 0.5 };
 }
 
-export default function Board({ fen, lastMove, arrows = [], interactive = false, hintSquare, onMove, label }: BoardProps) {
+export default function Board({ fen, lastMove, arrows = [], interactive = false, hintSquare, onMove, label, showCoordinates = true, pieceSize = "text-[clamp(22px,5.4vw,46px)]" }: BoardProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const game = useMemo(() => new Chess(fen), [fen]);
   const rows = game.board();
@@ -84,7 +88,7 @@ export default function Board({ fen, lastMove, arrows = [], interactive = false,
                 )}
                 {cell && (
                   <span
-                    className="relative font-chesspieces text-[clamp(22px,5.4vw,46px)]"
+                    className={`relative font-chesspieces ${pieceSize}`}
                     style={
                       cell.color === "w"
                         ? { color: "#FFFFFF", WebkitTextStroke: "1.3px #13233A", textShadow: "0 1px 0 rgba(19,35,58,.25)" }
@@ -94,10 +98,10 @@ export default function Board({ fen, lastMove, arrows = [], interactive = false,
                     {GLYPH[cell.type]}{"\uFE0E"}
                   </span>
                 )}
-                {fi === 0 && (
+                {showCoordinates && fi === 0 && (
                   <span className={`absolute left-[4%] top-[3%] text-[10px] font-semibold ${dark ? "text-[#E9ECE4]" : "text-[#6E8175]"}`}>{8 - ri}</span>
                 )}
-                {ri === 7 && (
+                {showCoordinates && ri === 7 && (
                   <span className={`absolute bottom-[2%] right-[5%] text-[10px] font-semibold ${dark ? "text-[#E9ECE4]" : "text-[#6E8175]"}`}>{FILES[fi]}</span>
                 )}
               </Tag>

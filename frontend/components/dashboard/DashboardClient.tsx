@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface User {
@@ -50,13 +51,21 @@ export default function DashboardClient() {
           "Loading your profile..."
         )}
       </p>
-      <button
-        type="button"
-        onClick={logout}
-        className="rounded-[10px] border border-[#D5DCE4] px-4 py-2 text-sm font-semibold text-[#13233A] hover:border-[#13233A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#13233A]"
-      >
-        Log out
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/profile"
+          className="rounded-[10px] bg-[#13233A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#223857] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#13233A]"
+        >
+          View player profile
+        </Link>
+        <button
+          type="button"
+          onClick={logout}
+          className="rounded-[10px] border border-[#D5DCE4] px-4 py-2 text-sm font-semibold text-[#13233A] hover:border-[#13233A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#13233A]"
+        >
+          Log out
+        </button>
+      </div>
     </div>
   );
 }
