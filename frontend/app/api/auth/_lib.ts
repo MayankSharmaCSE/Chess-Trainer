@@ -21,3 +21,27 @@ export function cookieOptions() {
     maxAge: SESSION_MAX_AGE,
   };
 }
+
+/** POST JSON to a public (no session) backend auth endpoint. */
+export async function postBackend(path: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> } | null> {
+  try {
+    const upstream = await fetch(`${backendUrl()}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    const data = (await upstream.json().catch(() => ({}))) as Record<string, unknown>;
+    return { status: upstream.status, data };
+  } catch {
+    return null; // backend unreachable
+  }
+}
+
+/** FastAPI `detail` can be a string or a list of validation errors. */
+export function detailText(data: Record<string, unknown>, fallback: string): string {
+  const d = data?.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d) && d[0] && typeof d[0] === "object" && "msg" in d[0]) return String((d[0] as { msg: unknown }).msg);
+  return fallback;
+}

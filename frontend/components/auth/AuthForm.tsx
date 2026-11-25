@@ -37,6 +37,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const search = useSearchParams();
   const next = search.get("next") || "/dashboard";
+  const justReset = mode === "login" && search.get("reset") === "1";
 
   const [username, setUsername] = useState("");
   const [identifier, setIdentifier] = useState("");
@@ -92,6 +93,11 @@ export default function AuthForm({ mode }: { mode: Mode }) {
 
   return (
     <form onSubmit={onSubmit} noValidate aria-describedby="auth-status">
+      {justReset && (
+        <p role="status" className="mb-4 rounded-[10px] border border-[#BFD8C6] bg-[#EEF7F0] px-3.5 py-2.5 text-sm font-medium text-[#1F5130]">
+          Password updated. Log in with your new password.
+        </p>
+      )}
       {mode === "signup" ? (
         <>
           <label htmlFor="username" className="block text-sm font-semibold">Username</label>
@@ -125,7 +131,17 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         </>
       )}
 
-      <label htmlFor="password" className="mt-4 block text-sm font-semibold">Password</label>
+      <div className="mt-4 flex items-baseline justify-between gap-3">
+        <label htmlFor="password" className="block text-sm font-semibold">Password</label>
+        {mode === "login" && (
+          <Link
+            href="/forgot-password"
+            className="rounded-[6px] text-sm font-semibold text-[#13233A] underline underline-offset-2 hover:text-[#223857] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#13233A]"
+          >
+            Forgot password?
+          </Link>
+        )}
+      </div>
       <div className="relative mt-1.5">
         <input
           id="password" name="password" type={showPw ? "text" : "password"}

@@ -34,3 +34,19 @@ LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "").strip()
 LLM_FALLBACK_MODELS = [
     m.strip() for m in os.getenv("LLM_FALLBACK_MODELS", "").split(",") if m.strip()
 ]
+
+# Password reset emails. Render's free tier blocks outbound SMTP (25/465/587),
+# so production uses Brevo's HTTP API (free: 300 emails/day). SMTP works
+# locally or on paid instances. With neither configured ("console"), emails
+# are written to the server log instead of sent: development only.
+MAIL_PROVIDER = os.getenv("MAIL_PROVIDER", "").strip().lower()  # brevo | smtp | console | "" (auto)
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "").strip()
+MAIL_FROM_EMAIL = os.getenv("MAIL_FROM_EMAIL", "").strip()
+MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "ChessLens").strip()
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "true").lower() not in ("0", "false", "no")
+PASSWORD_RESET_TTL_MIN = int(os.getenv("PASSWORD_RESET_TTL_MIN", "30"))
+PASSWORD_RESET_MAX_PER_HOUR = int(os.getenv("PASSWORD_RESET_MAX_PER_HOUR", "3"))

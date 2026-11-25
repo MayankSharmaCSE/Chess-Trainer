@@ -32,7 +32,7 @@ from app.core.config import (
 )
 from app.db.base import engine
 from app.models.user import User
-from app.services import coaching
+from app.services import coaching, mailer
 from app.services.engine import get_engine_version
 
 router = APIRouter(prefix="/api/health", tags=["health"])
@@ -86,7 +86,7 @@ def health() -> JSONResponse:
     body = {
         "status": "ok" if ok else "degraded",
         "commit": (os.getenv("RENDER_GIT_COMMIT") or "")[:7] or None,
-        "checks": {"database": db, "stockfish": sf, "ai_coaching": _ai_config()},
+        "checks": {"database": db, "stockfish": sf, "ai_coaching": _ai_config(), "email": mailer.status()},
     }
     return JSONResponse(body, status_code=200 if ok else 503)
 

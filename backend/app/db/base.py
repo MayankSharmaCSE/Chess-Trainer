@@ -38,6 +38,10 @@ ADDITIVE_COLUMNS: dict[str, list[str]] = {
     "endgame_attempts": [
         "session_id",
     ],
+    "users": [
+        "password_changed_at",
+        "session_version",
+    ],
 }
 
 

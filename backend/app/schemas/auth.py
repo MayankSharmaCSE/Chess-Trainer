@@ -27,3 +27,15 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class ForgotPasswordIn(BaseModel):
+    identifier: str = Field(min_length=1, max_length=255)  # email or username
+
+
+class ResetTokenIn(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+
+
+class ResetPasswordIn(ResetTokenIn):
+    password: str = Field(min_length=8, max_length=72)  # same rules as signup
