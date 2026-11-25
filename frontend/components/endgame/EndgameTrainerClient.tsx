@@ -13,6 +13,7 @@ import {
 } from "@/lib/endgame";
 import "./endgame.css";
 import "./trainer.css";
+import BackButton from "@/components/nav/BackButton";
 
 /* ------------------------------- icons ------------------------------- */
 
@@ -381,6 +382,7 @@ export default function EndgameTrainerClient() {
         {/* Top strip */}
         <div className="eg-board-wrap flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2 text-xs text-slate-400">
+            <BackButton tone="dark" size="sm" fallbackHref="/dashboard" />
             <Link href="/dashboard" className="hidden transition hover:text-slate-200 sm:inline">Dashboard</Link>
             <span className="hidden sm:inline">/</span>
             <button type="button" onClick={backToBrowse} className="font-semibold text-slate-200 transition hover:text-white">Endgames</button>

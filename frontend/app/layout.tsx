@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, JetBrains_Mono, Noto_Sans_Symbols_2 } from "next/font/google";
 import "./globals.css";
+import { NavHistoryTracker } from "@/components/nav/BackButton";
 import "@/components/landing/landing.css";
 
 const archivo = Archivo({ subsets: ["latin"], axes: ["wdth"], variable: "--font-archivo", display: "swap" });
@@ -21,7 +22,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${archivo.variable} ${jetbrains.variable} ${chess.variable}`}>
-      <body>{children}</body>
+      <body>
+        <NavHistoryTracker />
+        {children}
+      </body>
     </html>
   );
 }

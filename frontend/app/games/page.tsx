@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackButton from "@/components/nav/BackButton";
 import GamesClient from "@/components/games/GamesClient";
 
 export const metadata = {
@@ -9,7 +10,8 @@ export default function GamesPage() {
   return (
     <div className="min-h-screen bg-[#F2F4F6] font-body text-[#13233A] antialiased">
       <main className="mx-auto w-full max-w-[860px] px-5 py-12">
-        <p className="text-sm text-[#56657A]">
+        <BackButton fallbackHref="/dashboard" />
+        <p className="mt-4 text-sm text-[#56657A]">
           <Link href="/dashboard" className="underline underline-offset-2 hover:text-[#13233A]">
             Dashboard
           </Link>

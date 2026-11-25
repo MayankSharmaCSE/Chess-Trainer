@@ -220,7 +220,12 @@ export default function GameReplay({ id }: { id: string }) {
           </div>
         )}
         {analysisState === "ready" && analysis?.status === "pending" && (
-          <p className="text-sm font-medium">Analyzing with Stockfish... this page updates automatically.</p>
+          <p className="text-sm font-medium">
+            Analyzing with Stockfish... this page updates automatically.{" "}
+            <span className="font-normal text-[#56657A]">
+              Games are analyzed one at a time, so if others are queued this can take a few minutes. You can leave this page.
+            </span>
+          </p>
         )}
         {analysisState === "ready" && analysis?.status === "done" && (
           <div className="flex flex-wrap items-center justify-between gap-3">

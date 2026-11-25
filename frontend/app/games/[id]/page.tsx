@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackButton from "@/components/nav/BackButton";
 import GameReplay from "@/components/games/GameReplay";
 
 export const metadata = {
@@ -10,7 +11,8 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   return (
     <div className="min-h-screen bg-[#F2F4F6] font-body text-[#13233A] antialiased">
       <main className="mx-auto w-full max-w-[960px] px-5 py-12">
-        <p className="text-sm text-[#56657A]">
+        <BackButton fallbackHref="/games" />
+        <p className="mt-4 text-sm text-[#56657A]">
           <Link href="/games" className="underline underline-offset-2 hover:text-[#13233A]">
             Game library
           </Link>

@@ -7,6 +7,7 @@ import { Icon, type IconName } from "./icons";
 import { Avatar, Skeleton } from "./ui";
 import ProfileProvider, { useProfile } from "./ProfileProvider";
 import ProfileHeader from "./ProfileHeader";
+import BackButton from "@/components/nav/BackButton";
 
 const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: IconName }[] }[] = [
   {
@@ -299,6 +300,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
             {status === "error" && <ErrorGate message={error} onRetry={reload} />}
             {status === "ready" && data && (
               <>
+                <BackButton tone="dark" fallbackHref="/dashboard" className="mb-4" />
                 <ProfileHeader />
                 <ProfileTabs />
                 <div className="mt-5">{children}</div>

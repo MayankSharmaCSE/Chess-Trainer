@@ -7,6 +7,7 @@ import { api, type BotGame, type BotGameAnalysis, type BotMoveHistoryItem, ApiEr
 import BotAvatar, { getDifficultyBadgeStyle } from "./BotAvatar";
 import InteractiveBoard from "./InteractiveBoard";
 import "./zoom.css";
+import BackButton from "@/components/nav/BackButton";
 
 interface BotGameClientProps {
   gameId: string;
@@ -561,6 +562,7 @@ export default function BotGameClient({ gameId }: BotGameClientProps) {
         zoomOpen ? "bz-hidden" : zoomReturning ? "bz-return" : ""
       }`}
     >
+      <BackButton tone="dark" fallbackHref="/bots" className="mb-4" />
       {/* Top Breadcrumb Navigation & Status Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-slate-400">
         <div className="flex items-center gap-2">

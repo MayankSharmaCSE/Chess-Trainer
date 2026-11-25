@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, type Bot, ApiError } from "@/lib/bff";
 import BotAvatar, { getDifficultyBadgeStyle } from "./BotAvatar";
+import BackButton from "@/components/nav/BackButton";
 
 const DIFFICULTY_TABS = ["All", "Easy", "Intermediate", "Hard", "Expert"] as const;
 
@@ -77,6 +78,7 @@ export default function BotArenaClient() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <BackButton tone="dark" fallbackHref="/dashboard" className="mb-4" />
       {/* Breadcrumb Navigation */}
       <div className="flex items-center gap-2 text-sm text-slate-400">
         <Link href="/dashboard" className="transition hover:text-slate-200">
