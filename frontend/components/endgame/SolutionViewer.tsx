@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess } from "chess.js";
 import InteractiveBoard from "@/components/arena/InteractiveBoard";
 import type { SolutionMove } from "@/lib/endgame";
@@ -44,6 +44,7 @@ export default function SolutionViewer({
 }: SolutionViewerProps) {
   const [index, setIndex] = useState(0);
   const [autoplay, setAutoplay] = useState(false);
+  const activeMoveRef = useRef<HTMLButtonElement>(null);
 
   /* Client-side sequential re-validation: stop before any illegal move. */
   const line = useMemo(() => {
@@ -64,6 +65,12 @@ export default function SolutionViewer({
   const current = index > 0 ? line[index - 1] : null;
   const fen = current ? current.fen_after : startFen;
   const lastMove: [string, string] | null = current ? [current.from_square, current.to_square] : null;
+  const endsInMate = total > 0 && line[total - 1].is_mate;
+
+  /* Keep the current move visible in the (possibly long) scrollable list. */
+  useEffect(() => {
+    activeMoveRef.current?.scrollIntoView({ block: "nearest" });
+  }, [index]);
 
   const prev = useCallback(() => { setAutoplay(false); setIndex((i) => Math.max(0, i - 1)); }, []);
   const next = useCallback(() => { setAutoplay(false); setIndex((i) => Math.min(total, i + 1)); }, [total]);
@@ -166,8 +173,8 @@ export default function SolutionViewer({
         <span className="ml-1 font-mono text-xs font-bold text-slate-400">{index} / {total}</span>
       </div>
 
-      {/* Move list — player vs opponent clearly distinguished */}
-      <div className="eg-scroll max-h-[150px] overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/60 p-2 font-mono text-xs">
+      {/* Move list — player vs opponent clearly distinguished; long lines scroll */}
+      <div className="eg-scroll max-h-[220px] overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/60 p-2 font-mono text-xs">
         <div className="grid grid-cols-12 gap-1">
           {Array.from({ length: Math.ceil(total / 2) }).map((_, idx) => {
             const w = line[idx * 2];
@@ -178,24 +185,28 @@ export default function SolutionViewer({
               <div key={idx} className="contents">
                 <div className="col-span-2 py-1 font-semibold text-slate-500">{idx + 1}.</div>
                 <button type="button" onClick={() => { setAutoplay(false); setIndex(wIdx); }}
+                  ref={index === wIdx ? activeMoveRef : undefined}
                   className={`col-span-5 rounded px-2 py-1 text-left transition ${
                     index === wIdx ? "bg-amber-400/25 font-bold text-amber-300"
+                    : w?.is_mate ? "font-bold text-rose-300 hover:bg-slate-800"
                     : w?.color === playerColor ? "text-emerald-300 hover:bg-slate-800" : "text-slate-300 hover:bg-slate-800"
                   }`}>
-                  {w?.san ?? ""}{w?.color === playerColor ? " ★" : ""}
+                  {w?.san ?? ""}{w?.is_mate ? " ✓" : w?.color === playerColor ? " ★" : ""}
                 </button>
                 <button type="button" onClick={() => { setAutoplay(false); setIndex(bIdx); }}
+                  ref={index === bIdx ? activeMoveRef : undefined}
                   className={`col-span-5 rounded px-2 py-1 text-left transition ${
                     index === bIdx ? "bg-amber-400/25 font-bold text-amber-300"
+                    : b?.is_mate ? "font-bold text-rose-300 hover:bg-slate-800"
                     : b?.color === playerColor ? "text-emerald-300 hover:bg-slate-800" : "text-slate-400 hover:bg-slate-800"
                   }`}>
-                  {b?.san ?? ""}{b?.color === playerColor ? " ★" : ""}
+                  {b?.san ?? ""}{b?.is_mate ? " ✓" : b?.color === playerColor ? " ★" : ""}
                 </button>
               </div>
             );
           })}
         </div>
-        <p className="mt-1 px-1 text-[10px] text-slate-500">★ your moves · click any move to jump · ← → to navigate</p>
+        <p className="mt-1 px-1 text-[10px] text-slate-500">★ your moves · ✓ checkmate · click any move to jump · ← → to navigate</p>
       </div>
 
       {/* Objective status */}
@@ -205,9 +216,11 @@ export default function SolutionViewer({
         }`}>
           <Icon d={objectiveAchieved ? I_CHECK : I_TARGET} size={15} />
           <span>
-            {objectiveAchieved
-              ? <>Objective achieved: <strong>{objectiveLabel}</strong></>
-              : <>The verified line ends here — the objective is not reached yet. Close the solution and keep playing from your position.</>}
+            {endsInMate
+              ? <><strong>Checkmate reached.</strong> The final move {line[total - 1].san} delivers mate — objective achieved: <strong>{objectiveLabel}</strong></>
+              : objectiveAchieved
+                ? <>Objective achieved: <strong>{objectiveLabel}</strong></>
+                : <>The verified line ends here — the objective is not reached yet. Close the solution and keep playing from your position.</>}
           </span>
         </div>
       )}

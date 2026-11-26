@@ -53,10 +53,16 @@ def engine_available() -> bool:
 
 @contextmanager
 def engine_session(skill_level: int = 20):
-    """Yield a configured Stockfish UCI session, or None if unavailable."""
+    """Yield a configured Stockfish UCI session, or None if unavailable.
+
+    The read deadline is generous (30 s): solution building searches deep
+    endgames (KBN mate can need depth 18+ per segment) and a short deadline
+    would silently return a shallow, truncated PV. Searches still return as
+    soon as the engine emits `bestmove`.
+    """
     engine = None
     try:
-        engine = bot_engine.StockfishUCIProcess()
+        engine = bot_engine.StockfishUCIProcess(timeout=30.0)
         engine.configure(skill_level=skill_level)
         yield engine
     except (FileNotFoundError, OSError, TimeoutError, RuntimeError, chess.engine.EngineError) as e:
@@ -297,6 +303,13 @@ def pv_to_sans(fen: str, pv_ucis: list[str], limit: int = 8) -> list[str]:
 # Verified, objective-aware solution builder (Show Solution)
 # ---------------------------------------------------------------------------
 
+# Safety bounds, NOT display limits: the longest forced mate in these drills
+# is KBN vs K (<= 33 moves = 66 plies); promotion conversions add a little.
+# 200 plies / 40 engine segments can never truncate a genuine mating line,
+# but stop pathological shuffling (e.g. two knights, where mate is not forced).
+SOLUTION_MAX_PLIES = 200
+SOLUTION_MAX_SEGMENTS = 40
+
 
 def _record_move(board: chess.Board, mv: chess.Move) -> dict:
     """SAN + metadata for a move, computed on the live temporary board."""
@@ -352,15 +365,17 @@ def _line_from_sans(fen: str, sans: list[str], limit: int) -> tuple[list[dict], 
     return moves, None, None
 
 
-def _solution_reaches_objective(fen: str, moves: list[dict], drill: dict) -> bool:
-    """Replay a validated line and detect the objective exactly as the move
-    route does (terminal states first, evaluated right after each player move)."""
+def _objective_ply(fen: str, moves: list[dict], drill: dict) -> int | None:
+    """1-based ply where the objective is FIRST achieved, or None.
+
+    Mirrors the move route's terminal-first ordering exactly.
+    """
     board = chess.Board(fen)
     player = chess.WHITE if drill["player_color"] == "white" else chess.BLACK
     obj = drill["objective"]
     checks = 0
     player_moves = 0
-    for m in moves:
+    for i, m in enumerate(moves):
         mv = chess.Move.from_uci(m["uci"])
         mover = board.turn
         board.push(mv)
@@ -370,41 +385,92 @@ def _solution_reaches_objective(fen: str, moves: list[dict], drill: dict) -> boo
         if board.is_check():
             checks += 1
         if board.is_checkmate():
-            return True
+            return i + 1
         if board.is_stalemate() or board.is_insufficient_material() \
                 or board.can_claim_threefold_repetition() or board.can_claim_fifty_moves():
             if obj["type"] == "defend":
-                return True
+                return i + 1
             continue
         if obj["type"] == "promote" and mv.promotion:
             required = obj.get("piece")
             if required is None or chess.piece_symbol(mv.promotion) == required:
-                return True
+                return i + 1
         elif obj["type"] == "win_material":
             if not any(p.piece_type == obj["piece_type"] for p in board.piece_map().values() if p.color != player):
-                return True
+                return i + 1
         elif obj["type"] == "defend":
             if player_moves >= drill["max_moves"]:
-                return True
+                return i + 1
         elif objective_met(board, drill, checks):
-            return True
-    return False
+            return i + 1
+    return None
+
+
+def _solution_reaches_objective(fen: str, moves: list[dict], drill: dict) -> bool:
+    """Replay a validated line and detect the objective exactly as the move
+    route does (terminal states first, evaluated right after each player move)."""
+    return _objective_ply(fen, moves, drill) is not None
+
+
+def _engine_continuation(fen: str, depth: int, prefix: list[dict] | None = None) -> list[dict]:
+    """Iteratively extend the engine PV until the line genuinely terminates.
+
+    A single fixed-depth PV is NOT a complete solution: its length is bounded
+    by the search depth, so long endgames (KBN mate in 25+) get truncated.
+    Instead: replay the PV to its end, analyze the RESULTING position, append
+    the next PV, and repeat until checkmate, a draw, or the safety cap. Every
+    UCI is validated sequentially on the evolving board; an illegal PV is
+    re-analyzed once, then the extension stops (nothing illegal is recorded).
+    """
+    board = chess.Board(fen)
+    moves: list[dict] = list(prefix or [])
+    for m in moves:
+        board.push(chess.Move.from_uci(m["uci"]))
+    for _ in range(SOLUTION_MAX_SEGMENTS):
+        if len(moves) >= SOLUTION_MAX_PLIES or board.is_game_over():
+            break
+        ev = evaluate_position(board.fen(), depth=depth)
+        if not ev or not ev.get("pv_ucis"):
+            break
+        seg, bad, bad_fen = _line_from_ucis(board.fen(), ev["pv_ucis"], limit=SOLUTION_MAX_PLIES - len(moves))
+        if bad is not None:
+            logger.warning("Solution PV illegal: uci=%s fen=%s — requesting fresh analysis", bad, bad_fen)
+            ev = evaluate_position(board.fen(), depth=depth)
+            if not ev or not ev.get("pv_ucis"):
+                break
+            seg, bad, bad_fen = _line_from_ucis(board.fen(), ev["pv_ucis"], limit=SOLUTION_MAX_PLIES - len(moves))
+            if bad is not None:
+                logger.warning("Solution PV still illegal: uci=%s fen=%s — stopping extension", bad, bad_fen)
+                break
+        if not seg:
+            break
+        for m in seg:
+            board.push(chess.Move.from_uci(m["uci"]))
+        moves.extend(seg)
+        if board.is_checkmate():
+            break
+        # Stalemate / repetition / 50-move: no forced mate exists along this
+        # line (e.g. two knights vs lone king) — stop instead of shuffling.
+        if board.is_stalemate() or board.is_insufficient_material() \
+                or board.can_claim_threefold_repetition() or board.can_claim_fifty_moves():
+            break
+    return moves
 
 
 def build_solution(fen: str, drill: dict, history_sans: list[str]) -> dict:
-    """Build a verified, objective-aware solution from the EXACT current FEN.
+    """Build a verified solution from the EXACT current FEN.
 
-    Priority:
-      * checkmate drills: a fully replay-verified engine mating line; else the
-        curated model continuation when the player is still on that path.
-      * other drills: the model continuation when on-path (it teaches the
-        intended technique), else the engine's best continuation.
+    Winning drills: the line is extended segment by segment with Stockfish
+    until it ends in ACTUAL checkmate (never a fixed ply count). Checkmate
+    drills additionally REQUIRE a mate-terminated line — a partial line is
+    never presented as a verified mate solution (an error is returned).
+    Defend drills keep a short technique continuation (the goal is a draw).
     Every move is validated sequentially with python-chess (UCI -> legal check
-    -> push -> SAN). An invalid engine PV is logged and re-analyzed once; the
-    line is truncated before any illegal move. Nothing unverified is returned.
+    -> push -> SAN); an invalid engine PV is logged and re-analyzed once.
     """
     obj_type = drill["objective"]["type"]
     is_mate = obj_type == "checkmate"
+    defending = obj_type == "defend"
     out = {
         "start_fen": fen,
         "moves": [],
@@ -420,30 +486,26 @@ def build_solution(fen: str, drill: dict, history_sans: list[str]) -> dict:
     line = drill.get("solution_sans") or []
     n = len(history_sans)
     if line and n < len(line) and history_sans == line[:n]:
-        mm, bad, bad_fen = _line_from_sans(fen, line[n:], limit=60)
+        mm, bad, bad_fen = _line_from_sans(fen, line[n:], limit=SOLUTION_MAX_PLIES)
         if bad is not None:
             logger.warning("Model continuation invalid at %s (fen=%s); discarding", bad, bad_fen)
         else:
             model_moves = mm
+    model_mate = bool(model_moves) and model_moves[-1]["is_mate"]
 
-    # 2) Fresh, isolated engine analysis of the current position.
+    # 2) Fresh, isolated engine analysis of the current position, extended to
+    #    the end of the game (no fixed ply cap on the solution length).
     depth = 18 if is_mate else 16
-    engine_moves: list[dict] = []
-    ev = evaluate_position(fen, depth=depth)
-    for attempt in range(2):
-        if not ev or not ev.get("pv_ucis"):
-            break
-        mate_seen = ev.get("mate_moves")
-        limit = 60 if (is_mate and mate_seen is not None and mate_seen > 0) else 12
-        em, bad, bad_fen = _line_from_ucis(fen, ev["pv_ucis"], limit=limit)
-        if bad is None:
-            engine_moves = em
-            break
-        logger.warning("Solution PV illegal: uci=%s fen=%s (attempt %d) — requesting fresh analysis", bad, bad_fen, attempt + 1)
-        ev = evaluate_position(fen, depth=depth)
+    if defending:
+        engine_moves = _engine_continuation(fen, depth)[:12]
+    elif is_mate:
+        engine_moves = _engine_continuation(fen, depth)
+    else:
+        # Non-mate winning drills: teach the model technique when on-path,
+        # then carry the line on to checkmate (or the objective) with the engine.
+        engine_moves = _engine_continuation(fen, depth, prefix=model_moves)
 
     # 3) Objective-aware selection.
-    model_mate = bool(model_moves) and model_moves[-1]["is_mate"]
     engine_mate = bool(engine_moves) and engine_moves[-1]["is_mate"]
     chosen: list[dict] = []
     source = "none"
@@ -452,15 +514,32 @@ def build_solution(fen: str, drill: dict, history_sans: list[str]) -> dict:
             chosen, source = engine_moves, "engine"
         elif model_mate:
             chosen, source = model_moves, "model"
-        elif engine_moves:
-            chosen, source = engine_moves, "engine"
-        elif model_moves:
-            chosen, source = model_moves, "model"
-    else:
+        else:
+            out["error"] = (
+                "The engine could not verify a complete checkmate line from this position "
+                "right now. No partial solution is shown as verified — try Reset, or request a hint."
+            )
+            return out
+    elif defending:
         if model_moves:
             chosen, source = model_moves, "model"
         elif engine_moves:
             chosen, source = engine_moves, "engine"
+    else:
+        engine_added = len(engine_moves) > len(model_moves)
+        if engine_mate:
+            chosen, source = engine_moves, "engine"
+        elif not engine_added and model_moves:
+            # Engine offline / added nothing: the verified model technique stands alone.
+            chosen, source = model_moves, "model"
+        else:
+            ply = _objective_ply(fen, engine_moves, drill)
+            if ply is not None:
+                chosen, source = engine_moves[:ply], "engine"
+            elif model_moves:
+                chosen, source = model_moves, "model"
+            elif engine_moves:
+                chosen, source = engine_moves, "engine"
 
     if not chosen:
         out["error"] = (
