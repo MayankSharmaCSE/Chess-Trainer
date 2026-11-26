@@ -27,6 +27,20 @@ export default function WeaknessesPage() {
         <div className="mt-6 rounded-[18px] border border-[#D5DCE4] bg-white p-5 sm:p-6">
           <WeaknessHeatmap />
         </div>
+        <div className="mt-6 flex flex-col gap-4 rounded-[18px] border border-[#D5DCE4] bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div>
+            <h2 className="font-display text-xl font-bold">Train on my mistakes</h2>
+            <p className="mt-1 text-sm text-[#56657A]">
+              Replay the positions where you went wrong and find the better move.
+            </p>
+          </div>
+          <Link
+            href="/training"
+            className="shrink-0 rounded-[10px] bg-[#1F7A4D] px-4 py-2 text-sm font-semibold text-white hover:bg-[#16663E] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F7A4D]"
+          >
+            Train on my mistakes
+          </Link>
+        </div>
       </main>
     </div>
   );
