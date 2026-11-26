@@ -720,6 +720,7 @@ def reveal_solution(attempt_id: int, db: Session = Depends(get_db), user: User =
     sol = endgame.build_solution(attempt.fen, drill, history)
     db.commit()
     sans = [m["san"] for m in sol["moves"]]
+    ends_in_mate = bool(sol["moves"]) and sol["moves"][-1]["is_mate"]
     if sol["error"]:
         note = sol["error"]
     elif sol["source"] == "model":
@@ -733,6 +734,8 @@ def reveal_solution(attempt_id: int, db: Session = Depends(get_db), user: User =
             "Stockfish's verified best continuation from your current position — every move was "
             "validated legal before display." + (" It reaches the objective." if sol["objective_achieved"] else "")
         )
+    if ends_in_mate:
+        note += " The final move delivers checkmate."
     return RevealOut(
         model_line=drill["solution_sans"],
         pv_sans=sans,

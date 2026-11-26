@@ -359,21 +359,24 @@ class BishopKnightGenerator:
         b, color = self._random_kbn(rng, close_kings=dm.profile(diff)["close_kings"])
         if b is None:
             return None
-        zone = corner_zone(color)
         cname = "light" if color == chess.WHITE else "dark"
+        # The corner is a TECHNIQUE STEP, not the finish: the challenge is only
+        # complete on actual checkmate (KBN mate takes up to 33 moves, so the
+        # budget matches the full-mate drill, not a short drive).
         return _base(
             "bishop-knight", diff, "Drive to the Correct Corner",
             f"Your {cname}-squared bishop mates in the {cname} corners.",
-            b.fen(), {"type": "king_zone", "squares": zone},
-            f"Drive the black king into a {cname} corner region (the bishop's colour).",
+            b.fen(), {"type": "checkmate"},
+            f"Deliver checkmate in a {cname} corner (the bishop's colour).",
             ["Identify the correct mating corner from your bishop's colour.",
              "Drive the king toward that corner with bishop + knight + king.",
-             "Keep the king boxed; do not let it escape to the centre."],
+             "Keep the king boxed; do not let it escape to the centre.",
+             "Reaching the corner is not the end — deliver checkmate there; avoid stalemate."],
             ["A light-squared bishop mates at a8/h1; dark at a1/h8.",
              "The knight covers the squares the bishop cannot."],
             [f"Your bishop is {cname}-squared — aim for the {cname} corners.",
              "Centralize the king and herd with bishop diagonals + knight jumps.", H3],
-            20, 10, 16, 5, ("winning",),
+            34, 24, 32, 10, ("winning",),
         )
 
     def _wrong_corner(self, rng, diff):
